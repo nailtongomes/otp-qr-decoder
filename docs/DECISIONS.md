@@ -44,6 +44,18 @@ Classic scripts decode images from disk. PDF.js is a module plus a module worker
 
 Playwright generates QR PNGs and PDFs from the RFC test seeds (`12345678901234567890` and the longer SHA-256 / SHA-512 seeds). No real authenticator secret belongs in this repo. The migration fixture is a hand-described protobuf: three accounts, with the version field between the first and the second, so a parser that keeps only the first account, only the last, or fails to skip unknown fields, does not pass. An independent Node HMAC checks the same RFC rows the page must produce.
 
+## ADR 13 — Parameters live in the fragment
+
+`secret`, `url`, and the display options are read from the hash. The query string is copied into the hash and removed with `history.replaceState` before the values are used, and they are never written to the console. A query still hits the server on that first navigation; the move only stops the reload and later copies of the address from repeating it. `curl` cannot produce a code: the math runs in the page.
+
+## ADR 14 — Two origins, no redirects
+
+`connect-src` allows only `https://arquivos.n3wizards.com` and `https://minio.n3wizards.com`. The fetch uses `redirect: "manual"` and drops opaque redirects, so a bucket cannot bounce the browser at another host. Any other URL shows a short message and makes no request. A network or CORS failure says the bucket must allow this page's origin. There is no network time source, so the clock stays "device versus UTC" with the seconds remaining; we do not invent a skew warning.
+
+## ADR 15 — Bot view, link, and tones
+
+`just_code=1` and `format=json` hide the app and expose one `<pre>`. The title becomes the current code in `just_code`. Sounds are short WebAudio tones, with a mute flag kept in memory. Bot mode stays silent. Copy link builds `#secret=` plus digits, period, or algorithm only when they are not the defaults, and the status says the link contains the secret. The long privacy text sits in a `<details>` element.
+
 ## ADR 12 — What the deploy publishes
 
 The Pages workflow uploads `_site` with the HTML, CSS, JS, favicon, vendored libraries, license, and third-party notices. Tests, `node_modules`, and workflows stay off the site. Actions are pinned to commit SHAs. The workflow token can read contents; only the deploy job can write Pages and request the deployment token.

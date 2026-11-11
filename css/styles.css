@@ -74,6 +74,39 @@ body::before {
   z-index: 2;
 }
 
+body.is-bot .wrap { display: none; }
+
+body:not(.is-bot) .machine { display: none !important; }
+
+.machine {
+  margin: 24px;
+  font-family: var(--mono);
+  font-size: 3rem;
+  letter-spacing: 0.08em;
+}
+
+.machine.json {
+  font-size: 1rem;
+  letter-spacing: 0;
+  white-space: pre-wrap;
+}
+
+details.learn {
+  margin: 28px 0;
+  background: var(--elev);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px 16px 8px;
+}
+
+details.learn summary {
+  cursor: pointer;
+  font-weight: 650;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
 .skip:focus { top: 12px; }
 
 .wrap {

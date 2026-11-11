@@ -8,6 +8,9 @@
     report: null,
     webcrypto: !!(root.crypto && root.crypto.subtle),
     inputRevealed: false,
+    muted: false,
+    bot: false,
+    params: null,
   };
   let refreshing = false;
   let refreshQueued = false;
@@ -275,7 +278,13 @@
         void copyText(node.textContent, "statusCopiedFp");
       }
     });
-    actions.append(show, copySecret, copyUri, copyFp);
+    const copyLink = el("button", "copy-link", t("copyLink"));
+    copyLink.type = "button";
+    copyLink.addEventListener("click", function () {
+      const found = findAccount(account.id);
+      if (found) void copyText(fragmentLink(found), "statusLinkCopied");
+    });
+    actions.append(show, copySecret, copyUri, copyFp, copyLink);
     card.append(actions);
     return card;
   }
@@ -340,6 +349,7 @@
           account.current = await root.OtpTool.hotp(account.secret, account.counter, account);
           account.next = await root.OtpTool.hotp(account.secret, account.counter + 1n, account);
         }
+        account.expiresIn = 0;
         setDigits(card, account.current, account.next);
         card.querySelector(".countdown").textContent = t("hotpNote");
         const win = card.querySelector(".window");
@@ -362,6 +372,7 @@
       const endSec = startSec + BigInt(account.period);
       let remain = Number(endSec) - Math.floor(now / 1000);
       if (remain <= 0) remain = account.period;
+      account.expiresIn = remain;
       setDigits(card, account.current, account.next);
       card.querySelector(".countdown").textContent = t("countdown", { n: remain });
       const win = card.querySelector(".window");
@@ -391,6 +402,7 @@
         for (let i = 0; i < state.accounts.length; i += 1) {
           await paintCodes(state.accounts[i], now);
         }
+        updateBot();
       } while (refreshQueued);
     } finally {
       refreshing = false;
@@ -413,6 +425,7 @@
       errorKey: meta.errorKey || "",
     };
     paintReport();
+    chime("ok");
     void refreshCodes();
   }
 
@@ -478,6 +491,7 @@
       if (!batch.length && errorKey && !noQr && !ignored) {
         state.report = { kind: "key", key: errorKey, tone: "bad" };
         paintReport();
+        chime("bad");
         return;
       }
       if (!batch.length) {
@@ -488,6 +502,7 @@
           tone: "bad",
         };
         paintReport();
+        chime("bad");
         return;
       }
       appendAccounts(batch, {
@@ -510,12 +525,14 @@
     if (!String(text).trim()) {
       state.report = { kind: "key", key: "statusDecodeEmpty", tone: "bad" };
       paintReport();
+      chime("bad");
       return;
     }
     const parsed = root.OtpTool.parsePayload(text);
     if (!parsed.accounts.length) {
       state.report = { kind: "key", key: parsed.errors[0] || "badOtp", tone: "bad" };
       paintReport();
+      chime("bad");
       return;
     }
     field.value = "";
@@ -558,6 +575,7 @@
     root.OtpI18n.apply(root.document);
     fillZones();
     syncInputToggle();
+    syncMute();
     renderResults();
     paintReport();
     const banner = root.document.getElementById("webcrypto");
@@ -565,31 +583,190 @@
     void refreshCodes();
   }
 
-  function stripAddress() {
-    if (!root.location.search && !root.location.hash) return;
+  function syncMute() {
+    const button = root.document.getElementById("mute");
+    if (!button) return;
+    button.textContent = t(state.muted ? "muted" : "mute");
+    button.setAttribute("aria-pressed", state.muted ? "true" : "false");
+  }
+
+  function chime(kind) {
+    if (state.muted || state.bot) return;
     try {
-      const url = new URL(root.location.href);
-      url.search = "";
-      url.hash = "";
-      root.history.replaceState(null, "", url.pathname);
+      const Ctx = root.AudioContext || root.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = kind === "ok" ? 880 : 196;
+      const now = ctx.currentTime;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.05, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + (kind === "ok" ? 0.15 : 0.24));
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.26);
+      osc.onended = function () {
+        ctx.close();
+      };
     } catch (error) {
-      /* leave the address alone if the browser refuses */
+      /* Autoplay policies and headless browsers may refuse audio. */
     }
-    state.report = { kind: "key", key: "statusIgnoredUrl", tone: "bad" };
-    paintReport();
+  }
+
+  function acceptZone(value) {
+    if (!value) return "";
+    try {
+      const known = Intl.supportedValuesOf("timeZone");
+      if (value === "UTC" || known.indexOf(value) !== -1) return value;
+    } catch (error) {
+      if (value === "UTC" || /^[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)+$/.test(value)) return value;
+    }
+    return "";
+  }
+
+  function tune(account, params) {
+    if (params.digits === "6" || params.digits === "8") account.digits = Number(params.digits);
+    if (account.type === "totp" && /^[0-9]+$/.test(params.period || "")) {
+      const period = Number(params.period);
+      if (period >= 1 && period <= 86400) account.period = period;
+    }
+    const algorithm = (params.algorithm || "").toUpperCase().replace(/-/g, "");
+    if (algorithm === "SHA1" || algorithm === "SHA256" || algorithm === "SHA512") {
+      account.algorithm = algorithm;
+      account.unsupported = "";
+    }
+    account.base32 = root.OtpTool.base32Encode(account.secret);
+    account.uri = root.OtpTool.buildUri(account);
+    account.current = "";
+    account.next = "";
+    account.stepKey = "";
+    return account;
+  }
+
+  function fragmentLink(account) {
+    const params = new URLSearchParams();
+    params.set("secret", account.base32);
+    if (account.digits !== 6) params.set("digits", String(account.digits));
+    if (account.type === "totp" && account.period !== 30) params.set("period", String(account.period));
+    if (account.algorithm && account.algorithm !== "SHA1") params.set("algorithm", account.algorithm);
+    const current = new URL(root.location.href);
+    return current.origin + current.pathname + "#" + params.toString();
+  }
+
+  function updateBot() {
+    if (!state.bot || !state.accounts.length) return;
+    const account = state.accounts[0];
+    if (!account.current) return;
+    const expires = account.expiresIn == null ? 0 : account.expiresIn;
+    if (state.params && state.params.justCode) {
+      const node = root.document.getElementById("code");
+      node.textContent = account.current;
+      node.setAttribute("data-next", account.next || "");
+      node.setAttribute("data-expires-in", String(expires));
+      root.document.title = account.current;
+    }
+    if (state.params && state.params.format === "json") {
+      root.document.getElementById("json").textContent = JSON.stringify({
+        code: account.current,
+        next: account.next || "",
+        expires_in: expires,
+        period: account.period || 30,
+        digits: account.digits,
+      });
+    }
+  }
+
+  function remoteError(name) {
+    const error = new Error(name);
+    error.code = name;
+    return error;
+  }
+
+  async function loadRemote(raw) {
+    const href = root.OtpTool.allowedRemoteUrl(raw);
+    if (!href) {
+      state.report = { kind: "key", key: "remoteBlocked", tone: "bad" };
+      paintReport();
+      chime("bad");
+      return;
+    }
+    try {
+      const response = await root.fetch(href, {
+        method: "GET",
+        redirect: "manual",
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
+        mode: "cors",
+      });
+      if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
+        throw remoteError("remoteRedirect");
+      }
+      if (!response.ok) throw remoteError("remoteFetch");
+      if (response.url && !root.OtpTool.allowedRemoteUrl(response.url)) throw remoteError("remoteBlocked");
+      const blob = await response.blob();
+      const leaf = new URL(href).pathname.split("/").pop() || "remote.bin";
+      await handleFiles([new File([blob], leaf, { type: blob.type || "" })]);
+    } catch (error) {
+      if (error && (error.code === "remoteRedirect" || error.code === "remoteFetch" || error.code === "remoteBlocked")) {
+        state.report = { kind: "key", key: error.code, tone: "bad" };
+      } else {
+        state.report = { kind: "key", key: "remoteCors", tone: "bad" };
+      }
+      paintReport();
+      chime("bad");
+    }
+  }
+
+  async function bootParams(params) {
+    if (params.secret) {
+      const parsed = root.OtpTool.parsePayload(params.secret);
+      const accounts = [];
+      for (let i = 0; i < parsed.accounts.length; i += 1) accounts.push(tune(parsed.accounts[i], params));
+      if (accounts.length) appendAccounts(accounts, {});
+      else {
+        state.report = { kind: "key", key: parsed.errors[0] || "badOtp", tone: "bad" };
+        paintReport();
+        chime("bad");
+      }
+    }
+    if (params.url) await loadRemote(params.url);
   }
 
   function init() {
-    root.OtpI18n.use(root.OtpI18n.detect());
+    const params = root.OtpTool.readPageParams();
+    state.params = params;
+    state.bot = !!(params.justCode || params.format === "json");
+    if (params.lang === "pt") root.OtpI18n.use("pt-BR");
+    else if (params.lang === "en") root.OtpI18n.use("en");
+    else root.OtpI18n.use(root.OtpI18n.detect());
+    const zone = acceptZone(params.tz);
+    if (zone) state.timeZone = zone;
+    if (state.bot) {
+      state.muted = true;
+      root.document.body.classList.add("is-bot");
+      if (params.justCode) root.document.getElementById("code").hidden = false;
+      if (params.format === "json") root.document.getElementById("json").hidden = false;
+    }
     root.OtpI18n.apply(root.document);
     fillZones();
     syncInputToggle();
+    syncMute();
     renderResults();
     const banner = root.document.getElementById("webcrypto");
     banner.hidden = !!state.webcrypto;
     paintClocks(Date.now());
-    stripAddress();
 
+    root.document.getElementById("skip").addEventListener("click", function () {
+      const target = root.document.getElementById("results");
+      if (target) target.focus();
+    });
+    root.document.getElementById("mute").addEventListener("click", function () {
+      state.muted = !state.muted;
+      syncMute();
+    });
     root.document.getElementById("lang-pt").addEventListener("click", function () {
       setLanguage("pt-BR");
     });
@@ -657,6 +834,7 @@
     root.setInterval(function () {
       void refreshCodes();
     }, 500);
+    if (params.secret || params.url) void bootParams(params);
   }
 
   init();
