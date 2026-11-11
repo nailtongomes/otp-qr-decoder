@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -32,7 +33,18 @@ jobs:
         run: npm ci
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: |
+          set -euo pipefail
+          # ubuntu-latest already has the shared libraries. --with-deps also
+          # apt-installs recommended fonts, and that mirror failed DNS on this run.
+          for attempt in 1 2 3; do
+            if npx playwright install chromium; then
+              exit 0
+            fi
+            echo "browser download failed (attempt ${attempt})"
+            sleep $((attempt * 10))
+          done
+          exit 1
 
       - name: Test
         run: npm test
