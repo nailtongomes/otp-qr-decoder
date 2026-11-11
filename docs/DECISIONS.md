@@ -52,6 +52,10 @@ Playwright generates QR PNGs and PDFs from the RFC test seeds (`1234567890123456
 
 `connect-src` allows only `https://arquivos.n3wizards.com` and `https://minio.n3wizards.com`. The fetch uses `redirect: "manual"` and drops opaque redirects, so a bucket cannot bounce the browser at another host. Any other URL shows a short message and makes no request. A network or CORS failure says the bucket must allow this page's origin. There is no network time source, so the clock stays "device versus UTC" with the seconds remaining; we do not invent a skew warning.
 
+## ADR 16 — Paste is not only a paste event
+
+Browsers do not fire `paste` unless an editable control is focused, so Ctrl+V and the context-menu Paste do nothing on the rest of the page. The page still listens on `document` for a real paste event (`clipboardData.files` and `clipboardData.items`, plus otpauth or Base32 text). Ctrl/Cmd+V anywhere else, and the Chromium-only clipboard button, call `navigator.clipboard.read()` from that user gesture. The Content-Security-Policy does not cover the clipboard, and the page has no focus trap. An empty clipboard gets the failure tone and a short message.
+
 ## ADR 15 — Bot view, link, and tones
 
 `just_code=1` and `format=json` hide the app and expose one `<pre>`. The title becomes the current code in `just_code`. Sounds are short WebAudio tones, with a mute flag kept in memory. Bot mode stays silent. Copy link builds `#secret=` plus digits, period, or algorithm only when they are not the defaults, and the status says the link contains the secret. The long privacy text sits in a `<details>` element.

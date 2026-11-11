@@ -228,6 +228,8 @@ textarea.is-revealed { -webkit-text-security: none; }
 
 .drop strong { font-size: 1.05rem; }
 
+.paste-hint { color: var(--accent); }
+
 .drop.is-hot {
   border-style: solid;
   border-color: var(--accent);

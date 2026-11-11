@@ -57,12 +57,14 @@
       <label id="drop" class="drop">
         <strong data-i18n="dropTitle"></strong>
         <span class="help" id="drop-help" data-i18n="dropHelp"></span>
+        <strong class="paste-hint" data-i18n="pasteHint"></strong>
         <input id="file" class="file" type="file" multiple accept="image/png,image/jpeg,image/webp,.pdf,application/pdf" aria-describedby="drop-help">
       </label>
       <label class="field" for="fallback" data-i18n="fallbackLabel"></label>
       <textarea id="fallback" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"></textarea>
       <p class="help" data-i18n="fallbackHelp"></p>
       <div class="row-actions">
+        <button type="button" id="paste-clip" hidden data-i18n="pasteButton"></button>
         <button type="button" id="decode-text" class="primary" data-i18n="decodeText"></button>
         <button type="button" id="toggle-input" aria-pressed="false"></button>
       </div>

@@ -735,6 +735,145 @@
     if (params.url) await loadRemote(params.url);
   }
 
+  let readingClipboard = false;
+
+  function showNoImage() {
+    state.report = { kind: "key", key: "clipboardEmpty", tone: "bad" };
+    paintReport();
+    chime("bad");
+  }
+
+  function clipboardReadSupported() {
+    if (!root.isSecureContext || !root.navigator.clipboard) return false;
+    if (typeof root.navigator.clipboard.read !== "function") return false;
+    const ua = root.navigator.userAgent || "";
+    return /Chrome|Chromium|Edg\//.test(ua) && !/Firefox/.test(ua);
+  }
+
+  function isImageFile(file) {
+    return !!(file && file.type && file.type.indexOf("image/") === 0);
+  }
+
+  function imageFilesFromClipboard(data) {
+    const found = [];
+    const seen = [];
+    function add(file) {
+      if (!isImageFile(file)) return;
+      const key = file.type + ":" + file.size + ":" + (file.name || "");
+      if (seen.indexOf(key) !== -1) return;
+      seen.push(key);
+      found.push(file);
+    }
+    if (data.files && data.files.length) {
+      for (let i = 0; i < data.files.length; i += 1) add(data.files[i]);
+    }
+    if (data.items && data.items.length) {
+      for (let i = 0; i < data.items.length; i += 1) {
+        const item = data.items[i];
+        const type = item.type || "";
+        if (item.kind === "file" || type.indexOf("image/") === 0) {
+          if (item.getAsFile) add(item.getAsFile());
+        }
+      }
+    }
+    return found;
+  }
+
+  function textFromClipboard(data) {
+    if (!data.getData) return "";
+    try {
+      return data.getData("text/plain") || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function noteNoImage() {
+    showNoImage();
+  }
+
+  async function consumeClipboard(payload) {
+    const files = payload.files || [];
+    if (files.length) {
+      await handleFiles(files);
+      return;
+    }
+    const text = String(payload.text || "").trim();
+    if (text) {
+      const parsed = root.OtpTool.parsePayload(text);
+      if (parsed.accounts.length) {
+        if (state.params) {
+          for (let i = 0; i < parsed.accounts.length; i += 1) tune(parsed.accounts[i], state.params);
+        }
+        appendAccounts(parsed.accounts, { ignored: parsed.errors.length });
+        return;
+      }
+    }
+    showNoImage();
+  }
+
+  function onPaste(event) {
+    if (readingClipboard) return;
+    const data = event.clipboardData;
+    if (!data) return;
+    const files = imageFilesFromClipboard(data);
+    const text = textFromClipboard(data);
+    if (!files.length && !String(text).trim()) {
+      event.preventDefault();
+      noteNoImage();
+      return;
+    }
+    event.preventDefault();
+    void consumeClipboard({ files: files, text: text });
+  }
+
+  function onPasteKey(event) {
+    if (event.defaultPrevented) return;
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    if (event.key !== "v" && event.key !== "V") return;
+    const target = event.target;
+    const editable = target && (
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "INPUT" ||
+      target.isContentEditable
+    );
+    if (editable) return;
+    event.preventDefault();
+    readingClipboard = true;
+    pasteFromClipboardApi().finally(function () {
+      readingClipboard = false;
+    });
+  }
+
+  async function pasteFromClipboardApi() {
+    if (!clipboardReadSupported()) {
+      noteNoImage();
+      return;
+    }
+    try {
+      const items = await root.navigator.clipboard.read();
+      const files = [];
+      let text = "";
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i];
+        const types = item.types || [];
+        for (let tIndex = 0; tIndex < types.length; tIndex += 1) {
+          const type = types[tIndex];
+          if (type.indexOf("image/") === 0) {
+            const blob = await item.getType(type);
+            files.push(new File([blob], "clipboard", { type: type }));
+          } else if (type === "text/plain" && !text) {
+            const blob = await item.getType(type);
+            text = await blob.text();
+          }
+        }
+      }
+      await consumeClipboard({ files: files, text: text });
+    } catch (error) {
+      noteNoImage();
+    }
+  }
+
   function init() {
     const params = root.OtpTool.readPageParams();
     state.params = params;
@@ -812,25 +951,17 @@
       const files = event.dataTransfer && event.dataTransfer.files;
       if (files && files.length) void handleFiles(files);
     });
-    root.addEventListener(
-      "paste",
-      function (event) {
-        const items = event.clipboardData && event.clipboardData.items;
-        if (!items) return;
-        const files = [];
-        for (let i = 0; i < items.length; i += 1) {
-          const item = items[i];
-          if (item.kind === "file" && item.type && item.type.indexOf("image/") === 0) {
-            const file = item.getAsFile();
-            if (file) files.push(file);
-          }
-        }
-        if (!files.length) return;
-        event.preventDefault();
-        void handleFiles(files);
-      },
-      true
-    );
+    // Chrome does not emit a paste event unless an editable control is focused,
+    // so Ctrl/Cmd+V on the rest of the page never reached the old listener.
+    // The shortcut below calls clipboard.read() from the keydown gesture instead.
+    // CSP does not govern the clipboard. There is no focus trap.
+    const pasteButton = root.document.getElementById("paste-clip");
+    if (clipboardReadSupported()) pasteButton.hidden = false;
+    pasteButton.addEventListener("click", function () {
+      void pasteFromClipboardApi();
+    });
+    root.document.addEventListener("paste", onPaste, true);
+    root.document.addEventListener("keydown", onPasteKey, true);
     root.setInterval(function () {
       void refreshCodes();
     }, 500);

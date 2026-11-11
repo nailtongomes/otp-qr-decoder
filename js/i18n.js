@@ -19,7 +19,10 @@
       inputHeading: "Add a code",
       dropTitle: "Drop an image or PDF, or choose a file",
       dropHelp:
-        "PNG, JPEG, WebP, or a PDF (every page). Paste a screenshot with Ctrl+V or ⌘V. No camera. New files are added until you press Clear.",
+        "PNG, JPEG, WebP, or a PDF (every page). No camera. New files are added until you press Clear.",
+      pasteHint: "Paste an image (Ctrl+V)",
+      pasteButton: "Paste from clipboard",
+      clipboardEmpty: "The clipboard has no image.",
       fallbackLabel: "Or paste an otpauth link or a Base32 secret",
       fallbackHelp: "This box is cleared after a successful decode.",
       decodeText: "Decode text",
@@ -122,7 +125,10 @@
       inputHeading: "Adicionar um código",
       dropTitle: "Solte uma imagem ou PDF, ou escolha um arquivo",
       dropHelp:
-        "PNG, JPEG, WebP ou um PDF (todas as páginas). Cole uma captura com Ctrl+V ou ⌘V. Sem câmera. Arquivos novos entram na lista até você limpar.",
+        "PNG, JPEG, WebP ou um PDF (todas as páginas). Sem câmera. Arquivos novos entram na lista até você limpar.",
+      pasteHint: "Cole (Ctrl+V) uma imagem",
+      pasteButton: "Colar da área de transferência",
+      clipboardEmpty: "A área de transferência não tem uma imagem.",
       fallbackLabel: "Ou cole um link otpauth ou um segredo em Base32",
       fallbackHelp: "Este campo é apagado depois de uma leitura bem-sucedida.",
       decodeText: "Decodificar texto",

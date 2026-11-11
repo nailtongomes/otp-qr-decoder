@@ -251,15 +251,89 @@ test("paste and drag-and-drop decode an image", async ({ page }) => {
   }, b64);
   await expect(page.locator(".digits-current")).toHaveText("94287082");
   await page.locator("#clear").click();
+  await page.locator("h1").click();
   await page.evaluate((image) => {
     const bytes = Uint8Array.from(atob(image), (char) => char.charCodeAt(0));
     const file = new File([bytes], "paste.png", { type: "image/png" });
     const transfer = new DataTransfer();
     transfer.items.add(file);
-    const event = new Event("paste", { bubbles: true, cancelable: true });
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(event, "clipboardData", { value: transfer });
-    window.dispatchEvent(event);
+    document.dispatchEvent(event);
   }, b64);
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+});
+
+test("document paste accepts an image blob, clipboard files, and otpauth text", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+  await expect(page.locator("#paste-clip")).toBeVisible();
+  await expect(page.getByText("Paste an image (Ctrl+V)")).toBeVisible();
+  const b64 = readFileSync(fixture("totp.png")).toString("base64");
+
+  await page.locator("h1").click();
+  await page.evaluate((image) => {
+    const bytes = Uint8Array.from(atob(image), (char) => char.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "image/png" });
+    const file = new File([blob], "shot.png", { type: "image/png" });
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { files: [file], items: [], getData: () => "" },
+    });
+    document.dispatchEvent(event);
+  }, b64);
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+
+  await page.locator("#clear").click();
+  await page.locator("body").click();
+  await page.evaluate((image) => {
+    const bytes = Uint8Array.from(atob(image), (char) => char.charCodeAt(0));
+    const file = new File([bytes], "from-items.png", { type: "image/png" });
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [],
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
+        getData: () => "",
+      },
+    });
+    document.dispatchEvent(event);
+  }, b64);
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+
+  await page.locator("#clear").click();
+  await page.locator("h1").click();
+  await page.evaluate((secret) => {
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { files: [], items: [], getData: (type) => (type === "text/plain" ? secret : "") },
+    });
+    document.dispatchEvent(event);
+  }, SECRET);
+  await expect(page.locator(".digits-current")).toHaveText("287082");
+
+  await page.locator("#clear").click();
+  await page.evaluate(() => {
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { files: [], items: [], getData: () => "" },
+    });
+    document.dispatchEvent(event);
+  });
+  await expect(page.locator("#status")).toHaveText("The clipboard has no image.");
+  await expect(page.locator(".account")).toHaveCount(0);
+
+  await page.evaluate(async (image) => {
+    const bytes = Uint8Array.from(atob(image), (char) => char.charCodeAt(0));
+    await navigator.clipboard.write([
+      new ClipboardItem({ "image/png": new Blob([bytes], { type: "image/png" }) }),
+    ]);
+  }, b64);
+  await page.locator("h1").click();
+  await page.keyboard.press("Control+v");
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+  await page.locator("#clear").click();
+  await page.locator("#paste-clip").click();
   await expect(page.locator(".digits-current")).toHaveText("94287082");
 });
 
