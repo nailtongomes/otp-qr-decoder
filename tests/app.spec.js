@@ -8,7 +8,7 @@ import { SHA1_SEED, SHA256_SEED, SHA512_SEED, base32Encode, fingerprint, hotp, t
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const SECRET = base32Encode(SHA1_SEED);
 const CSP =
-  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'none'; form-action 'none'; base-uri 'none'";
+  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src https://arquivos.n3wizards.com https://minio.n3wizards.com; form-action 'none'; base-uri 'none'";
 
 const RFC6238 = [
   { time: 59, SHA1: "94287082", SHA256: "46119246", SHA512: "90693936" },
@@ -251,15 +251,89 @@ test("paste and drag-and-drop decode an image", async ({ page }) => {
   }, b64);
   await expect(page.locator(".digits-current")).toHaveText("94287082");
   await page.locator("#clear").click();
+  await page.locator("h1").click();
   await page.evaluate((image) => {
     const bytes = Uint8Array.from(atob(image), (char) => char.charCodeAt(0));
     const file = new File([bytes], "paste.png", { type: "image/png" });
     const transfer = new DataTransfer();
     transfer.items.add(file);
-    const event = new Event("paste", { bubbles: true, cancelable: true });
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(event, "clipboardData", { value: transfer });
-    window.dispatchEvent(event);
+    document.dispatchEvent(event);
   }, b64);
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+});
+
+test("document paste accepts an image blob, clipboard files, and otpauth text", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+  await expect(page.locator("#paste-clip")).toBeVisible();
+  await expect(page.getByText("Paste an image (Ctrl+V)")).toBeVisible();
+  const b64 = readFileSync(fixture("totp.png")).toString("base64");
+
+  await page.locator("h1").click();
+  await page.evaluate((image) => {
+    const bytes = Uint8Array.from(atob(image), (char) => char.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "image/png" });
+    const file = new File([blob], "shot.png", { type: "image/png" });
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { files: [file], items: [], getData: () => "" },
+    });
+    document.dispatchEvent(event);
+  }, b64);
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+
+  await page.locator("#clear").click();
+  await page.locator("body").click();
+  await page.evaluate((image) => {
+    const bytes = Uint8Array.from(atob(image), (char) => char.charCodeAt(0));
+    const file = new File([bytes], "from-items.png", { type: "image/png" });
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [],
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
+        getData: () => "",
+      },
+    });
+    document.dispatchEvent(event);
+  }, b64);
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+
+  await page.locator("#clear").click();
+  await page.locator("h1").click();
+  await page.evaluate((secret) => {
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { files: [], items: [], getData: (type) => (type === "text/plain" ? secret : "") },
+    });
+    document.dispatchEvent(event);
+  }, SECRET);
+  await expect(page.locator(".digits-current")).toHaveText("287082");
+
+  await page.locator("#clear").click();
+  await page.evaluate(() => {
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { files: [], items: [], getData: () => "" },
+    });
+    document.dispatchEvent(event);
+  });
+  await expect(page.locator("#status")).toHaveText("The clipboard has no image.");
+  await expect(page.locator(".account")).toHaveCount(0);
+
+  await page.evaluate(async (image) => {
+    const bytes = Uint8Array.from(atob(image), (char) => char.charCodeAt(0));
+    await navigator.clipboard.write([
+      new ClipboardItem({ "image/png": new Blob([bytes], { type: "image/png" }) }),
+    ]);
+  }, b64);
+  await page.locator("h1").click();
+  await page.keyboard.press("Control+v");
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+  await page.locator("#clear").click();
+  await page.locator("#paste-clip").click();
   await expect(page.locator(".digits-current")).toHaveText("94287082");
 });
 
@@ -388,6 +462,7 @@ test("the page does not call the network, storage, or a service worker", async (
     "/favicon.svg",
     "/css/styles.css",
     "/js/app.js",
+    "/js/params.js",
     "/js/i18n.js",
     "/js/totp.js",
     "/js/parse.js",
@@ -401,6 +476,10 @@ test("the page does not call the network, storage, or a service worker", async (
   for (const url of requests) {
     const parsed = new URL(url);
     if (parsed.protocol === "data:" || parsed.protocol === "blob:") continue;
+    const remoteOk =
+      parsed.protocol === "https:" &&
+      (parsed.hostname === "arquivos.n3wizards.com" || parsed.hostname === "minio.n3wizards.com");
+    if (remoteOk) continue;
     if (parsed.hostname !== "127.0.0.1" || !allowed.has(parsed.pathname)) unexpected.push(url);
   }
   expect(unexpected, "unexpected requests:\n" + unexpected.join("\n")).toEqual([]);
@@ -419,4 +498,114 @@ test("the page does not call the network, storage, or a service worker", async (
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   expect(mobileOverflow).toBe(false);
+});
+
+test("fragment parameters decode on load and a copied link carries the secret", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/#secret=" + SECRET + "&digits=8&lang=en&tz=UTC");
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+  await expect(page.locator(".digits-next")).toHaveText("37359152");
+  await expect(page.locator("#tz")).toHaveValue("UTC");
+  await expect(page.locator(".window")).toContainText("1970-01-01 00:00:30");
+  await page.locator(".copy-link").click();
+  const link = await page.evaluate(() => navigator.clipboard.readText());
+  expect(link).toContain("#secret=" + SECRET);
+  expect(link).toContain("digits=8");
+  expect(link).not.toContain("period=");
+  expect(link).not.toContain("algorithm=");
+  await expect(page.locator("#status")).toContainText("contains the secret");
+  await expect(page.locator("#status")).not.toContainText(SECRET);
+  expect(new URL(page.url()).search).toBe("");
+});
+
+test("query parameters move to the fragment and the query is stripped", async ({ page }) => {
+  const seen = [];
+  page.on("request", (request) => {
+    if (request.url().includes(SECRET)) seen.push(request.url());
+  });
+  await page.goto("/?secret=" + SECRET + "&digits=8&just_code=0");
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+  const current = new URL(page.url());
+  expect(current.search).toBe("");
+  expect(current.hash).toContain("secret=" + SECRET);
+  expect(current.hash).toContain("digits=8");
+  expect(seen.filter((url) => !url.includes("?secret=")).length).toBe(0);
+});
+
+test("just_code and format=json match the RFC 6238 vector", async ({ page }) => {
+  await page.goto("/#secret=" + SECRET + "&just_code=1&digits=8");
+  const code = page.locator("#code");
+  await expect(code).toHaveText("94287082");
+  await expect(code).toHaveAttribute("data-next", "37359152");
+  await expect(code).toHaveAttribute("data-expires-in", "1");
+  await expect(page).toHaveTitle("94287082");
+  await expect(page.locator("h1")).toBeHidden();
+  await page.goto("/index.html#secret=" + SECRET + "&format=json&digits=8&period=30");
+  const body = JSON.parse(await page.locator("#json").innerText());
+  expect(body).toEqual({
+    code: "94287082",
+    next: "37359152",
+    expires_in: 1,
+    period: 30,
+    digits: 8,
+  });
+  await expect(page.locator("h1")).toBeHidden();
+});
+
+test("remote url is limited to the two allowed origins", async ({ page }) => {
+  const seen = [];
+  page.on("request", (request) => seen.push(request.url()));
+  await page.goto("/#url=" + encodeURIComponent("https://evil.example/a.pdf"));
+  const verdict = await page.evaluate(() => ({
+    arquivos: OtpTool.allowedRemoteUrl("https://arquivos.n3wizards.com/x.pdf"),
+    minio: OtpTool.allowedRemoteUrl("https://minio.n3wizards.com/bucket/x.png"),
+    http: OtpTool.allowedRemoteUrl("http://arquivos.n3wizards.com/x.pdf"),
+    lookalike: OtpTool.allowedRemoteUrl("https://arquivos.n3wizards.com.evil.com/x.pdf"),
+    other: OtpTool.allowedRemoteUrl("https://evil.example/x.pdf"),
+  }));
+  expect(verdict.arquivos).toBe("https://arquivos.n3wizards.com/x.pdf");
+  expect(verdict.minio).toContain("https://minio.n3wizards.com/");
+  expect(verdict.http).toBe("");
+  expect(verdict.lookalike).toBe("");
+  expect(verdict.other).toBe("");
+  await expect(page.locator("#status")).toContainText("not requested");
+  expect(seen.some((url) => url.includes("evil.example"))).toBe(false);
+
+  await page.goto("/index.html#url=" + encodeURIComponent("http://arquivos.n3wizards.com/a.pdf"));
+  await expect(page.locator("#status")).toContainText("not requested");
+  expect(seen.some((url) => url.includes("arquivos.n3wizards.com"))).toBe(false);
+
+  await page.route("https://arquivos.n3wizards.com/**", (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: readFileSync(fixture("totp.png")),
+    });
+  });
+  await page.goto("/#url=" + encodeURIComponent("https://arquivos.n3wizards.com/x.png"));
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+
+  await page.route("https://minio.n3wizards.com/redir.pdf", (route) => {
+    route.fulfill({
+      status: 302,
+      headers: { location: "https://evil.example/nope.pdf" },
+    });
+  });
+  await page.goto("/index.html#url=" + encodeURIComponent("https://minio.n3wizards.com/redir.pdf"));
+  await expect(page.locator("#status")).toContainText("redirects");
+  expect(seen.some((url) => url.includes("evil.example"))).toBe(false);
+});
+
+test("sounds do not throw, including when muted", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await page.setInputFiles("#file", fixture("totp.png"));
+  await expect(page.locator(".digits-current")).toHaveText("94287082");
+  await page.locator("#mute").click();
+  await expect(page.locator("#mute")).toHaveAttribute("aria-pressed", "true");
+  await page.locator("#clear").click();
+  await page.setInputFiles("#file", fixture("none.png"));
+  await expect(page.locator("#status")).toHaveText("No QR code found.");
+  expect(errors).toEqual([]);
 });

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; worker-src 'self' blob:; connect-src https://arquivos.n3wizards.com https://minio.n3wizards.com; form-action 'none'; base-uri 'none'">
   <meta name="description" content="Decode otpauth QR codes locally in your browser. Secrets are not uploaded.">
   <meta name="theme-color" content="#0d4f3c" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#10241c" media="(prefers-color-scheme: dark)">
@@ -13,7 +13,9 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <a class="skip" href="#results" data-i18n="skip"></a>
+  <button type="button" class="skip" id="skip" data-i18n="skip"></button>
+  <pre id="code" class="machine" hidden></pre>
+  <pre id="json" class="machine json" hidden></pre>
   <div class="wrap">
     <header class="top">
       <div>
@@ -22,6 +24,7 @@
         <p class="subtitle" data-i18n="subtitle"></p>
       </div>
       <div class="langs" id="lang-group" role="group" data-i18n-aria="langLabel">
+        <button type="button" id="mute" aria-pressed="false"></button>
         <button type="button" id="lang-pt" aria-pressed="true">PT-BR</button>
         <button type="button" id="lang-en" aria-pressed="false">EN</button>
       </div>
@@ -54,12 +57,14 @@
       <label id="drop" class="drop">
         <strong data-i18n="dropTitle"></strong>
         <span class="help" id="drop-help" data-i18n="dropHelp"></span>
+        <strong class="paste-hint" data-i18n="pasteHint"></strong>
         <input id="file" class="file" type="file" multiple accept="image/png,image/jpeg,image/webp,.pdf,application/pdf" aria-describedby="drop-help">
       </label>
       <label class="field" for="fallback" data-i18n="fallbackLabel"></label>
       <textarea id="fallback" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off"></textarea>
       <p class="help" data-i18n="fallbackHelp"></p>
       <div class="row-actions">
+        <button type="button" id="paste-clip" hidden data-i18n="pasteButton"></button>
         <button type="button" id="decode-text" class="primary" data-i18n="decodeText"></button>
         <button type="button" id="toggle-input" aria-pressed="false"></button>
       </div>
@@ -72,10 +77,12 @@
       </div>
       <p id="webcrypto" class="callout" hidden data-i18n="webcrypto"></p>
       <div id="status" class="status" role="status"></div>
-      <div id="results"></div>
+      <div id="results" tabindex="-1"></div>
     </section>
 
-    <section class="prose" aria-labelledby="privacy-heading">
+    <details class="learn">
+      <summary data-i18n="learnMore"></summary>
+      <div class="prose">
       <h2 id="privacy-heading" data-i18n="privacyHeading"></h2>
       <p data-i18n="privacyLead"></p>
       <ul>
@@ -105,7 +112,8 @@
         <li data-i18n="f2"></li>
         <li data-i18n="f3"></li>
       </ul>
-    </section>
+      </div>
+    </details>
 
     <footer>
       <p data-i18n="footer"></p>
@@ -115,6 +123,7 @@
     <p>This page needs JavaScript. It runs only in your browser. Nothing is uploaded.</p>
     <p>Esta página precisa de JavaScript. Ele roda só no seu navegador. Nada é enviado.</p>
   </noscript>
+  <script defer src="js/params.js" referrerpolicy="no-referrer"></script>
   <script defer src="vendor/jsqr/jsQR.js" referrerpolicy="no-referrer"></script>
   <script defer src="js/totp.js" referrerpolicy="no-referrer"></script>
   <script defer src="js/migration.js" referrerpolicy="no-referrer"></script>
