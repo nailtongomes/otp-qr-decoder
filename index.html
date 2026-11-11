@@ -25,32 +25,10 @@
       </div>
       <div class="langs" id="lang-group" role="group" data-i18n-aria="langLabel">
         <button type="button" id="mute" aria-pressed="false"></button>
-        <button type="button" id="lang-pt" aria-pressed="true">PT-BR</button>
-        <button type="button" id="lang-en" aria-pressed="false">EN</button>
+        <button type="button" id="lang-pt" aria-pressed="true">🇧🇷 PT-BR</button>
+        <button type="button" id="lang-en" aria-pressed="false">🇺🇸 EN</button>
       </div>
     </header>
-
-    <section aria-labelledby="clock-heading">
-      <h2 id="clock-heading" data-i18n="clockHeading"></h2>
-      <p id="clock-note" class="clock-note" data-i18n="clockNote"></p>
-      <dl class="clock-grid">
-        <div class="clock">
-          <dt id="label-device" data-i18n="clockDevice"></dt>
-          <dd id="clock-device"></dd>
-        </div>
-        <div class="clock">
-          <dt id="label-utc" data-i18n="clockUtc"></dt>
-          <dd id="clock-utc"></dd>
-        </div>
-        <div class="clock">
-          <dt id="label-ref" data-i18n="clockRef"></dt>
-          <dd id="clock-ref"></dd>
-        </div>
-      </dl>
-      <label class="field" for="tz" data-i18n="tzLabel"></label>
-      <select id="tz"></select>
-      <p class="help" data-i18n="tzHelp"></p>
-    </section>
 
     <section aria-labelledby="input-heading">
       <h2 id="input-heading" data-i18n="inputHeading"></h2>
@@ -80,6 +58,28 @@
       <div id="results" tabindex="-1"></div>
     </section>
 
+    <section aria-labelledby="clock-heading">
+      <h2 id="clock-heading" data-i18n="clockHeading"></h2>
+      <p id="clock-note" class="clock-note" data-i18n="clockNote"></p>
+      <dl class="clock-grid">
+        <div class="clock">
+          <dt id="label-device" data-i18n="clockDevice"></dt>
+          <dd id="clock-device"></dd>
+        </div>
+        <div class="clock">
+          <dt id="label-utc" data-i18n="clockUtc"></dt>
+          <dd id="clock-utc"></dd>
+        </div>
+        <div class="clock">
+          <dt id="label-ref" data-i18n="clockRef"></dt>
+          <dd id="clock-ref"></dd>
+        </div>
+      </dl>
+      <label class="field" for="tz" data-i18n="tzLabel"></label>
+      <select id="tz"></select>
+      <p class="help" data-i18n="tzHelp"></p>
+    </section>
+    
     <details class="learn">
       <summary data-i18n="learnMore"></summary>
       <div class="prose">
