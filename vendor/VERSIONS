@@ -1,0 +1,21 @@
+jsQR 1.4.0
+  license: Apache-2.0
+  registry: https://registry.npmjs.org/jsqr/-/jsqr-1.4.0.tgz
+  files: vendor/jsqr/jsQR.js (unmodified package/dist/jsQR.js)
+  license file: vendor/jsqr/LICENSE
+
+pdfjs-dist 6.5.438 (Mozilla PDF.js, legacy build)
+  license: Apache-2.0
+  registry: https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-6.5.438.tgz
+  files:
+    vendor/pdfjs/pdf.min.js — unmodified bytes of package/legacy/build/pdf.min.mjs
+    vendor/pdfjs/pdf.worker.min.js — unmodified bytes of package/legacy/build/pdf.worker.min.mjs
+  The .js extension is intentional. The bytes are ECMAScript modules. GitHub Pages
+  and many static servers label .js as JavaScript; .mjs has been served as a
+  download in the past, which blocks module and worker loading.
+  license file: vendor/pdfjs/LICENSE
+  Wasm decoders, cmaps, and standard fonts are not vendored. The page does not
+  set cMapUrl, standardFontDataUrl, or wasmUrl, and it sets useWorkerFetch: false.
+
+SHA-256 of the files above is recorded in vendor/SHA256SUMS and checked by
+scripts/verify-vendor-hashes.mjs and the Playwright suite.
